@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import re # 링크 추출을 위한 정규표현식 라이브러리
+import re # 링크 추출용
+import os
 
 # -----------------------------------------------------------------------------
 # 1. 설정 및 기본 데이터
@@ -13,52 +14,54 @@ COLUMNS = [
     '휴무일', '추천인', '평점', '태그', '한줄평'
 ]
 
-CSV_FILE = 'lunch_data_v3.csv'
+# 파일명을 고정하여 데이터 유실 방지
+CSV_FILE = 'lunch_db.csv' 
 
-# 기본 태그 목록 (초기값)
+# 기본 태그 목록
 DEFAULT_TAGS = ["비오는날", "해장", "조용함", "빨리나옴", "회식가능", "손님접대", "가성비", "혼밥가능"]
 
-# 거리 정렬을 위한 맵핑 (검색 로직용)
+# 거리 정렬 맵핑
 DISTANCE_MAP = {"도보 5분 이내": 1, "도보 10분 이내": 2, "차량 이동": 3}
 
 # -----------------------------------------------------------------------------
-# 2. 헬퍼 함수 (데이터 로드/저장/링크파싱)
+# 2. 헬퍼 함수 (데이터 로드/저장 - 인코딩 수정됨)
 # -----------------------------------------------------------------------------
 def load_data():
-    import os
+    # 1. 파일이 없으면 새로 생성
     if not os.path.exists(CSV_FILE):
         df = pd.DataFrame(columns=COLUMNS)
-        df.to_csv(CSV_FILE, index=False)
+        df.to_csv(CSV_FILE, index=False, encoding='utf-8-sig')
         return df
-    return pd.read_csv(CSV_FILE)
+    
+    # 2. 파일이 있으면 로드 (한글 깨짐 방지 utf-8-sig 적용)
+    try:
+        df = pd.read_csv(CSV_FILE, encoding='utf-8-sig')
+    except:
+        # 혹시나 인코딩 에러나면 기본 utf-8로 시도
+        df = pd.read_csv(CSV_FILE, encoding='utf-8')
+        
+    return df
 
 def save_data(df):
-    df.to_csv(CSV_FILE, index=False)
+    # 저장할 때 반드시 utf-8-sig 사용 (엑셀 호환)
+    df.to_csv(CSV_FILE, index=False, encoding='utf-8-sig')
 
 def extract_url(text):
-    """
-    네이버 지도 공유 텍스트에서 https:// 링크만 추출합니다.
-    """
+    """링크 텍스트에서 URL만 추출"""
     if not isinstance(text, str): return ""
-    # https://naver.me/xxxxx 또는 일반 https 링크 추출 패턴
     match = re.search(r'(https?://\S+)', text)
     if match:
         return match.group(1)
-    return text # 링크가 없으면 입력값 그대로 반환 (혹은 빈 문자열)
+    return text
 
 def get_all_tags(df):
-    """
-    기존 데이터에 있는 태그들과 기본 태그들을 합쳐서 중복 없이 반환합니다.
-    """
+    """저장된 태그와 기본 태그 합치기"""
     existing_tags = set()
     if '태그' in df.columns:
         for tag_str in df['태그'].dropna():
             if tag_str:
                 existing_tags.update([t.strip() for t in tag_str.split(',')])
-    
-    # 기본 태그와 합치기
-    all_tags = sorted(list(existing_tags.union(DEFAULT_TAGS)))
-    return all_tags
+    return sorted(list(existing_tags.union(DEFAULT_TAGS)))
 
 # -----------------------------------------------------------------------------
 # 3. 팝업: 맛집 등록 (Dialog)
@@ -75,27 +78,20 @@ def popup_register():
         name = col1.text_input("식당 이름 (필수)")
         category = col2.selectbox("음식 카테고리", ["한식", "중식", "일식", "양식", "아시안", "분식/기타"])
         
-        # 수정됨: 선택형 입력
         col3, col4 = st.columns(2)
         price = col3.selectbox("1인당 평균 가격", ["1만원 미만", "1~1.5만원", "1.5~2만원", "2만원 이상"])
         distance = col4.radio("회사 거리", ["도보 5분 이내", "도보 10분 이내", "차량 이동"], horizontal=True)
         
-        # 수정됨: 인원 선택형
         col5, col6 = st.columns(2)
         capacity = col5.selectbox("최대 수용 인원 (테이블)", ["2명", "4명", "6명", "8명", "제한없음(단체가능)"])
         waiting = col6.selectbox("평소 웨이팅", ["없음", "보통", "심함"])
 
-        # 수정됨: 링크 파싱용 텍스트 에리어
-        raw_link = st.text_area("네이버 지도 링크 (공유 텍스트 붙여넣기)", 
-                              placeholder="예: [네이버지도] 덕수파스타... https://naver.me/...")
+        raw_link = st.text_area("네이버 지도 링크", placeholder="예: [네이버지도] 덕수파스타... https://naver.me/...")
         
-        # 수정됨: 태그 (선택 + 직접입력)
         selected_tags = st.multiselect("추천 태그 (선택)", all_tags)
         new_tag = st.text_input("태그 직접 추가 (엔터 키 입력)", placeholder="목록에 없으면 여기에 입력하세요")
         
-        # 수정됨: 점수 (1~5점 선택)
         rating = st.radio("나의 별점", [1, 2, 3, 4, 5], index=2, horizontal=True, format_func=lambda x: "⭐"*x)
-        
         comment = st.text_input("한줄평")
         recommender = st.text_input("추천인")
 
@@ -105,12 +101,10 @@ def popup_register():
             if not name:
                 st.error("식당 이름은 필수입니다!")
             else:
-                # 데이터 전처리
-                final_link = extract_url(raw_link) # 링크 추출
-                
+                final_link = extract_url(raw_link)
                 final_tags = selected_tags
                 if new_tag:
-                    final_tags.append(new_tag) # 새 태그 추가
+                    final_tags.append(new_tag)
                 
                 new_row = {
                     '식당명': name, '카테고리': category, '가격대': price, 
@@ -123,7 +117,7 @@ def popup_register():
                 
                 updated_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 save_data(updated_df)
-                st.toast(f"'{name}' 등록 성공! 링크가 자동으로 추출되었습니다.", icon="✅")
+                st.toast(f"'{name}' 등록 성공!", icon="✅")
                 st.rerun()
 
 # -----------------------------------------------------------------------------
@@ -137,69 +131,54 @@ if menu == "🔍 점심 추천 (Agent)":
     
     df = load_data()
     if df.empty:
-        st.warning("데이터가 없습니다. 먼저 맛집을 등록해주세요!")
+        st.warning("데이터가 없습니다. 사이드바 메뉴에서 [데이터 관리] > [맛집 등록]을 먼저 해주세요!")
     else:
         with st.container(border=True):
             st.subheader("🔍 조건 검색")
             c1, c2, c3 = st.columns(3)
             
-            # 1. 카테고리 (전체 포함)
-            cat_options = ["전체"] + list(df['카테고리'].unique())
+            # 카테고리 검색 (전체 추가)
+            cat_options = ["전체"] + sorted(list(df['카테고리'].unique()))
             s_cat = c1.selectbox("카테고리", cat_options)
             
-            # 2. 거리 (로직 포함)
-            # 5분 선택 -> 5분만 / 10분 선택 -> 5분+10분 / 차량 -> 전체
             s_dist = c2.selectbox("최대 이동 거리", ["도보 5분 이내", "도보 10분 이내", "차량 이동(전체)"], index=1)
-            
-            # 3. 태그 검색
             s_keyword = c3.multiselect("원하는 분위기/태그", get_all_tags(df))
             
             if st.button("추천 받기 🎲", type="primary", use_container_width=True):
                 result = df.copy()
                 
-                # 필터 1: 카테고리
+                # 1. 카테고리 필터
                 if s_cat != "전체":
                     result = result[result['카테고리'] == s_cat]
                 
-                # 필터 2: 거리 (레벨 비교)
-                # 선택한 거리의 레벨보다 작거나 같은(가까운) 곳은 모두 포함
-                # 예: 사용자가 '10분(Lv 2)' 선택 -> '5분(Lv 1)'과 '10분(Lv 2)' 모두 통과
+                # 2. 거리 필터 (포함 관계 적용)
                 user_dist_level = DISTANCE_MAP.get(s_dist, 3) 
-                
-                # 데이터에 있는 거리 텍스트를 숫자로 변환하여 비교
-                # (데이터가 비어있으면 기본적으로 포함시킴)
                 result['dist_lvl'] = result['거리'].map(DISTANCE_MAP).fillna(1) 
-                
-                if "차량" not in s_dist: # 차량 선택시 거리 필터 무시 (전체)
+                if "차량" not in s_dist:
                     result = result[result['dist_lvl'] <= user_dist_level]
 
-                # 필터 3: 태그 (교집합 검색)
+                # 3. 태그 필터
                 if s_keyword:
-                    # 하나라도 포함되면 결과에 나옴
                     mask = result['태그'].apply(lambda x: any(k in str(x) for k in s_keyword))
                     result = result[mask]
                 
-                # 결과 출력
                 if result.empty:
                     st.error("조건에 맞는 식당이 없습니다.")
                 else:
                     st.success(f"총 {len(result)}곳을 찾았습니다!")
                     
-                    # 추천 결과 카드
                     for i, row in result.iterrows():
                         with st.expander(f"🍽️ **{row['식당명']}** ({row['카테고리']}) {'⭐'*int(row['평점'])}"):
                             col_a, col_b = st.columns([3, 1])
                             with col_a:
-                                st.write(f"- **거리:** {row['거리']} | **가격:** {row['가격대']}")
-                                st.write(f"- **인원:** {row['최대수용인원']}")
+                                st.write(f"- 🚶 **거리:** {row['거리']} | 💰 **가격:** {row['가격대']}")
+                                st.write(f"- 👥 **인원:** {row['최대수용인원']}")
                                 if row['태그']:
                                     st.caption(f"🏷️ {row['태그']}")
                                 st.info(f"🗣️ {row['한줄평']}")
                             with col_b:
                                 if row['네이버지도URL']:
                                     st.link_button("지도 보기 🗺️", row['네이버지도URL'])
-                                else:
-                                    st.write("(링크 없음)")
 
 # [관리 페이지]
 elif menu == "📊 데이터 관리":
@@ -211,12 +190,11 @@ elif menu == "📊 데이터 관리":
             
     df = load_data()
     
-    # 데이터 에디터 (수정/삭제 가능)
-    st.markdown("데이터를 직접 수정하거나 삭제할 수 있습니다. (체크박스 선택 후 Del 키 혹은 휴지통 아이콘)")
+    st.markdown("데이터를 직접 수정하거나 삭제할 수 있습니다. (체크박스 선택 후 Del 키)")
+    # 데이터 에디터 (행 추가/삭제 허용 옵션 켬)
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
     
-    # 변경사항 저장 버튼
     if st.button("변경사항 저장하기"):
         save_data(edited_df)
-        st.success("데이터가 저장되었습니다!")
+        st.success("데이터가 안전하게(UTF-8-SIG) 저장되었습니다!")
         st.rerun()
