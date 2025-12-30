@@ -6,7 +6,6 @@ from streamlit_gsheets import GSheetsConnection
 # [LangChain]
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
-from langchain.agents.agent_types import AgentType
 
 # -----------------------------------------------------------------------------
 # 1. 설정 및 기본 데이터
@@ -115,7 +114,7 @@ def get_agent(df):
         llm,
         df,
         verbose=True,
-        agent_type=AgentType.OPENAI_FUNCTIONS,
+        agent_type="openai-functions",
         allow_dangerous_code=True 
     )
 
