@@ -1,3 +1,7 @@
 streamlit
 pandas
 st-gsheets-connection
+langchain
+langchain-openai
+langchain-experimental
+tabulate
