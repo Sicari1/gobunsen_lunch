@@ -37,17 +37,17 @@
    ```bash
    git clone [https://github.com/Sicari1/gobunsen_lunch.git](https://github.com/Sicari1/gobunsen_lunch.git)
    cd gobunsen_lunch
-   '''
+   ```
 
 2. **라이브러리 설치**
 ```bash
 pip install -r requirements.txt
-   '''
+   ```
 
 3. **앱 실행**
 ```bash
 streamlit run app.py
-'''
+```
 
 ---
 
@@ -61,5 +61,4 @@ gobunsen_lunch/
 └── README.md           # 프로젝트 설명서
 
 ```
-
 ```
