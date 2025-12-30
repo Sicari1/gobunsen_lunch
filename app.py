@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 from streamlit_gsheets import GSheetsConnection
+from streamlit_tags import st_tags  # [필수] 태그 입력용 라이브러리
 
 # [LangChain]
 from langchain_openai import ChatOpenAI
@@ -34,7 +35,6 @@ OPT_WAITING = ["없음", "보통", "심함"]
 OPT_DAYS = ["월", "화", "수", "목", "금", "토", "일", "연중무휴"]
 OPT_RATING = [x * 0.5 for x in range(1, 11)]
 
-# (팝업 등록용) 자주 쓰는 키워드
 COMMON_MENUS = ["김치찌개", "된장찌개", "제육볶음", "돈가스", "파스타", "짜장면", "짬뽕", "삼겹살", "국밥", "샌드위치", "샐러드", "회/초밥"]
 COMMON_VIBES = ["조용한", "깔끔한", "시끌벅적한", "노포감성", "빨리나옴", "혼밥가능", "회식추천", "손님접대", "가성비", "비오는날", "해장"]
 DISTANCE_MAP = {"도보 5분 이내": 1, "도보 10분 이내": 2, "차량 이동": 3}
@@ -46,16 +46,10 @@ def load_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        
-        if df.empty or len(df.columns) < len(COLUMNS):
-            return pd.DataFrame(columns=COLUMNS)
-        
+        if df.empty or len(df.columns) < len(COLUMNS): return pd.DataFrame(columns=COLUMNS)
         missing_cols = set(COLUMNS) - set(df.columns)
-        for c in missing_cols:
-            df[c] = ""
-            
-        df = df[COLUMNS]
-        df = df.fillna("")
+        for c in missing_cols: df[c] = ""
+        df = df[COLUMNS].fillna("")
         df['평점'] = pd.to_numeric(df['평점'], errors='coerce').fillna(0.0)
         df = df.astype({c: str for c in df.columns if c != '평점'})
         return df
@@ -105,15 +99,11 @@ def get_agent(df):
         api_key=st.secrets["openai"]["api_key"]
     )
     return create_pandas_dataframe_agent(
-        llm,
-        df,
-        verbose=True,
-        agent_type="openai-functions",
-        allow_dangerous_code=True 
+        llm, df, verbose=True, agent_type="openai-functions", allow_dangerous_code=True 
     )
 
 # -----------------------------------------------------------------------------
-# 4. 팝업 UI (맛집 등록)
+# 4. 팝업 UI (맛집 등록) - [완벽 수정] st_tags 적용
 # -----------------------------------------------------------------------------
 @st.dialog("맛집 등록하기 📝")
 def popup_register():
@@ -123,9 +113,29 @@ def popup_register():
         name = col1.text_input("식당 이름 (필수)")
         category = col2.selectbox("카테고리", OPT_CATEGORY)
         
-        menu_tags = st.multiselect("🥘 메뉴 키워드", COMMON_MENUS)
-        vibe_tags = st.multiselect("✨ 분위기 키워드", COMMON_VIBES)
+        # [수정] st_tags 라이브러리 사용: 선택 + 입력(엔터) 동시에 가능
+        st.markdown("##### 🏷️ 키워드 (검색하거나, 입력 후 Enter)")
         
+        c_k1, c_k2 = st.columns(2)
+        with c_k1:
+            menu_tags = st_tags(
+                label='🥘 메뉴',
+                text='메뉴 입력 후 엔터',
+                value=[],
+                suggestions=COMMON_MENUS,
+                maxtags=10,
+                key='tags_menu'
+            )
+        with c_k2:
+            vibe_tags = st_tags(
+                label='✨ 분위기',
+                text='특징 입력 후 엔터',
+                value=[],
+                suggestions=COMMON_VIBES,
+                maxtags=10,
+                key='tags_vibe'
+            )
+
         c1, c2 = st.columns(2)
         price = c1.selectbox("가격대", OPT_PRICE)
         distance = c2.select_slider("회사 거리", options=OPT_DISTANCE)
@@ -147,9 +157,14 @@ def popup_register():
                 st.error("식당 이름은 필수입니다!")
             else:
                 final_link = extract_url(raw_link)
+                
+                # st_tags는 리스트를 반환하므로 쉼표 문자열로 변환
+                str_menus = ",".join(menu_tags)
+                str_vibes = ",".join(vibe_tags)
+
                 new_row = {
                     '식당명': name, '카테고리': category, 
-                    '메뉴키워드': ",".join(menu_tags), '분위기키워드': ",".join(vibe_tags),
+                    '메뉴키워드': str_menus, '분위기키워드': str_vibes,
                     '가격대': price, '거리': distance, '최대수용인원': capacity, 
                     '전화번호': phone, '네이버지도URL': final_link, 
                     '예약필수여부': reservation, '웨이팅정도': waiting, '휴무일': ",".join(off_days), 
@@ -259,9 +274,8 @@ elif menu == "📊 데이터 관리":
     df = load_data()
     existing_recommenders = get_unique_values(df, '추천인')
     
-    st.markdown("⚠️ **Tip:** **'메뉴/분위기'** 칸은 자유롭게 입력(콤마로 구분)하세요. 나머지는 더블클릭하여 선택하세요.")
+    st.markdown("⚠️ **Tip:** 메뉴/분위기는 **자유롭게 텍스트 입력**이 가능합니다. (예: 김치찌개, 계란말이)")
     
-    # [수정됨] 메뉴와 분위기를 다시 '자유 텍스트 입력'으로 변경
     edited_df = st.data_editor(
         df, 
         num_rows="dynamic", 
@@ -275,12 +289,9 @@ elif menu == "📊 데이터 관리":
             "네이버지도URL": st.column_config.LinkColumn(display_text="링크"),
             "전화번호": st.column_config.TextColumn(width="medium"),
             "한줄평": st.column_config.TextColumn(width="large"),
-            
             "평점": st.column_config.SelectboxColumn(label="평점", width="small", options=OPT_RATING, required=True),
             "추천인": st.column_config.SelectboxColumn(label="추천인", width="medium", options=existing_recommenders),
             "휴무일": st.column_config.SelectboxColumn(label="휴무일", width="small", options=OPT_DAYS),
-
-            # [핵심 변경] 드롭다운 제거 -> 자유 입력 (예: "김치찌개, 계란말이")
             "메뉴키워드": st.column_config.TextColumn(label="메뉴 (자유입력)", width="medium"),
             "분위기키워드": st.column_config.TextColumn(label="분위기 (자유입력)", width="medium"),
         }
