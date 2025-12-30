@@ -7,7 +7,7 @@ from streamlit_tags import st_tags  # [필수] 태그 입력용 라이브러리
 # [LangChain]
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
-from langchain.agents import AgentType
+# from langchain.agents import AgentType  <-- [삭제됨] 절대 다시 넣지 않겠습니다.
 
 # -----------------------------------------------------------------------------
 # 1. 설정 및 기본 데이터
@@ -99,11 +99,15 @@ def get_agent(df):
         api_key=st.secrets["openai"]["api_key"]
     )
     return create_pandas_dataframe_agent(
-        llm, df, verbose=True, agent_type="openai-functions", allow_dangerous_code=True 
+        llm, 
+        df, 
+        verbose=True, 
+        agent_type="openai-functions", # [확인] 문자열로 직접 입력 (에러 방지)
+        allow_dangerous_code=True 
     )
 
 # -----------------------------------------------------------------------------
-# 4. 팝업 UI (맛집 등록) - [완벽 수정] st_tags 적용
+# 4. 팝업 UI (맛집 등록) - st_tags 적용
 # -----------------------------------------------------------------------------
 @st.dialog("맛집 등록하기 📝")
 def popup_register():
@@ -113,7 +117,7 @@ def popup_register():
         name = col1.text_input("식당 이름 (필수)")
         category = col2.selectbox("카테고리", OPT_CATEGORY)
         
-        # [수정] st_tags 라이브러리 사용: 선택 + 입력(엔터) 동시에 가능
+        # [st_tags 사용]
         st.markdown("##### 🏷️ 키워드 (검색하거나, 입력 후 Enter)")
         
         c_k1, c_k2 = st.columns(2)
@@ -158,7 +162,7 @@ def popup_register():
             else:
                 final_link = extract_url(raw_link)
                 
-                # st_tags는 리스트를 반환하므로 쉼표 문자열로 변환
+                # st_tags 리스트를 콤마 문자열로 변환
                 str_menus = ",".join(menu_tags)
                 str_vibes = ",".join(vibe_tags)
 
