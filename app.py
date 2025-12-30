@@ -14,8 +14,8 @@ from langchain_experimental.agents import create_pandas_dataframe_agent
 st.set_page_config(page_title="🍱 우리 팀 점심 에이전트", page_icon="😋", layout="wide")
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_WvbJhPTbxU5c4hMwv9ak-G78jajBD-ZIrzvqxvgDTI/edit?usp=sharing"
-MODEL_NAME = "gpt-5-mini"
-#"gpt-4o-mini" 
+MODEL_NAME = "gpt-4o"
+#"-mini" 
 
 COLUMNS = [
     '식당명', '카테고리', '메뉴키워드', '분위기키워드', 
