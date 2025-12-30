@@ -7,7 +7,6 @@ from streamlit_tags import st_tags  # [필수] 태그 입력용 라이브러리
 # [LangChain]
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
-# from langchain.agents import AgentType  <-- [삭제됨] 절대 다시 넣지 않겠습니다.
 
 # -----------------------------------------------------------------------------
 # 1. 설정 및 기본 데이터
@@ -102,84 +101,88 @@ def get_agent(df):
         llm, 
         df, 
         verbose=True, 
-        agent_type="openai-functions", # [확인] 문자열로 직접 입력 (에러 방지)
+        agent_type="openai-functions",
         allow_dangerous_code=True 
     )
 
 # -----------------------------------------------------------------------------
-# 4. 팝업 UI (맛집 등록) - st_tags 적용
+# 4. 팝업 UI (맛집 등록) - [수정됨] st.form 제거하여 st_tags 동작 보장
 # -----------------------------------------------------------------------------
 @st.dialog("맛집 등록하기 📝")
 def popup_register():
     st.caption("필요한 정보만 빠르게 터치해서 등록하세요!")
-    with st.form("reg_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        name = col1.text_input("식당 이름 (필수)")
-        category = col2.selectbox("카테고리", OPT_CATEGORY)
-        
-        # [st_tags 사용]
-        st.markdown("##### 🏷️ 키워드 (검색하거나, 입력 후 Enter)")
-        
-        c_k1, c_k2 = st.columns(2)
-        with c_k1:
-            menu_tags = st_tags(
-                label='🥘 메뉴',
-                text='메뉴 입력 후 엔터',
-                value=[],
-                suggestions=COMMON_MENUS,
-                maxtags=10,
-                key='tags_menu'
-            )
-        with c_k2:
-            vibe_tags = st_tags(
-                label='✨ 분위기',
-                text='특징 입력 후 엔터',
-                value=[],
-                suggestions=COMMON_VIBES,
-                maxtags=10,
-                key='tags_vibe'
-            )
+    
+    # [수정] st.form 제거함. 이제 엔터치면 즉시 반영됩니다.
+    col1, col2 = st.columns(2)
+    name = col1.text_input("식당 이름 (필수)")
+    category = col2.selectbox("카테고리", OPT_CATEGORY)
+    
+    # [st_tags 사용] - Form 밖이므로 엔터 입력 시 정상적으로 태그가 추가됨
+    st.markdown("##### 🏷️ 키워드 (검색하거나, 입력 후 Enter)")
+    
+    c_k1, c_k2 = st.columns(2)
+    with c_k1:
+        menu_tags = st_tags(
+            label='🥘 메뉴',
+            text='메뉴 입력 후 엔터',
+            value=[],
+            suggestions=COMMON_MENUS,
+            maxtags=10,
+            key='tags_menu_input' # Key 충돌 방지용 이름 변경
+        )
+    with c_k2:
+        vibe_tags = st_tags(
+            label='✨ 분위기',
+            text='특징 입력 후 엔터',
+            value=[],
+            suggestions=COMMON_VIBES,
+            maxtags=10,
+            key='tags_vibe_input'
+        )
 
-        c1, c2 = st.columns(2)
-        price = c1.selectbox("가격대", OPT_PRICE)
-        distance = c2.select_slider("회사 거리", options=OPT_DISTANCE)
-        capacity = st.radio("인원 선택", OPT_CAPACITY, horizontal=True)
+    c1, c2 = st.columns(2)
+    price = c1.selectbox("가격대", OPT_PRICE)
+    distance = c2.select_slider("회사 거리", options=OPT_DISTANCE)
+    capacity = st.radio("인원 선택", OPT_CAPACITY, horizontal=True)
 
-        r1, r2, r3 = st.columns(3)
-        phone = r1.text_input("전화번호")
-        reservation = r2.selectbox("예약 정보", OPT_RESERVATION)
-        waiting = r3.selectbox("평소 웨이팅", OPT_WAITING)
-        off_days = st.multiselect("휴무일", OPT_DAYS)
-        raw_link = st.text_area("네이버 지도 링크", height=70)
+    r1, r2, r3 = st.columns(3)
+    phone = r1.text_input("전화번호")
+    reservation = r2.selectbox("예약 정보", OPT_RESERVATION)
+    waiting = r3.selectbox("평소 웨이팅", OPT_WAITING)
+    off_days = st.multiselect("휴무일", OPT_DAYS)
+    raw_link = st.text_area("네이버 지도 링크", height=70)
 
-        rating = st.slider("별점", 1.0, 5.0, 3.0, 0.5)
-        comment = st.text_input("한줄평")
-        recommender = st.text_input("추천인")
+    rating = st.slider("별점", 1.0, 5.0, 3.0, 0.5)
+    comment = st.text_input("한줄평")
+    recommender = st.text_input("추천인")
 
-        if st.form_submit_button("등록 완료", type="primary", use_container_width=True):
-            if not name:
-                st.error("식당 이름은 필수입니다!")
-            else:
-                final_link = extract_url(raw_link)
-                
-                # st_tags 리스트를 콤마 문자열로 변환
-                str_menus = ",".join(menu_tags)
-                str_vibes = ",".join(vibe_tags)
+    st.markdown("---")
+    
+    # [수정] st.form_submit_button -> st.button으로 변경
+    if st.button("등록 완료", type="primary", use_container_width=True):
+        if not name:
+            st.error("식당 이름은 필수입니다!")
+        else:
+            final_link = extract_url(raw_link)
+            
+            # st_tags 리스트를 콤마 문자열로 변환
+            str_menus = ",".join(menu_tags)
+            str_vibes = ",".join(vibe_tags)
 
-                new_row = {
-                    '식당명': name, '카테고리': category, 
-                    '메뉴키워드': str_menus, '분위기키워드': str_vibes,
-                    '가격대': price, '거리': distance, '최대수용인원': capacity, 
-                    '전화번호': phone, '네이버지도URL': final_link, 
-                    '예약필수여부': reservation, '웨이팅정도': waiting, '휴무일': ",".join(off_days), 
-                    '추천인': recommender, '평점': rating, '한줄평': comment
-                }
-                df = load_data()
-                new_df = pd.DataFrame([new_row])
-                updated_df = pd.concat([df, new_df], ignore_index=True)
-                save_data(updated_df)
-                st.toast(f"'{name}' 등록 성공!", icon="✅")
-                st.rerun()
+            new_row = {
+                '식당명': name, '카테고리': category, 
+                '메뉴키워드': str_menus, '분위기키워드': str_vibes,
+                '가격대': price, '거리': distance, '최대수용인원': capacity, 
+                '전화번호': phone, '네이버지도URL': final_link, 
+                '예약필수여부': reservation, '웨이팅정도': waiting, '휴무일': ",".join(off_days), 
+                '추천인': recommender, '평점': rating, '한줄평': comment
+            }
+            df = load_data()
+            new_df = pd.DataFrame([new_row])
+            updated_df = pd.concat([df, new_df], ignore_index=True)
+            save_data(updated_df)
+            st.toast(f"'{name}' 등록 성공!", icon="✅")
+            st.rerun()
 
 # -----------------------------------------------------------------------------
 # 5. 메인 화면
