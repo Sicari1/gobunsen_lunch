@@ -37,28 +37,17 @@
    ```bash
    git clone [https://github.com/Sicari1/gobunsen_lunch.git](https://github.com/Sicari1/gobunsen_lunch.git)
    cd gobunsen_lunch
+   '''
 
 2. **라이브러리 설치**
 ```bash
 pip install -r requirements.txt
+   '''
 
-
-3. **Secrets 설정** (.streamlit/secrets.toml)
-프로젝트 루트에 `.streamlit` 폴더를 만들고 `secrets.toml` 파일을 생성하여 아래 정보를 입력해야 합니다.
-```toml
-[connections.gsheets]
-spreadsheet = "구글시트_주소"
-# ... (GCP 서비스 계정 정보) ...
-
-[openai]
-api_key = "sk-..."
-
-
-4. **앱 실행**
+3. **앱 실행**
 ```bash
 streamlit run app.py
-
-```
+'''
 
 ---
 
