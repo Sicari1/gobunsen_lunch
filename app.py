@@ -199,8 +199,8 @@ elif menu == "📊 데이터 관리":
     
     df = load_data()
     existing_recommenders = get_unique_values(df, '추천인')
-    
-    st.markdown("⚠️ **주의:** 키워드 칸은 **1개만 선택** 가능하며, 선택 시 기존 내용은 덮어씌워집니다. 여러 개 입력하려면 **직접 입력(텍스트)**을 권장합니다.")
+    st.markdown("같은 가게에 대해 각자의 리뷰를 남겨도 됩니다!")
+    st.markdown("⚠️ **주의:** 키워드 칸은 **1개만 선택** 가능하며, 선택 시 기존 내용은 덮어씌워집니다. 여러 개 입력하려면 직접 입력(텍스트)을 권장합니다.")
     
     edited_df = st.data_editor(
         df, 
