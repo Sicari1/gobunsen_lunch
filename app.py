@@ -6,6 +6,7 @@ from streamlit_gsheets import GSheetsConnection
 # [LangChain]
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
+from langchain.agents import AgentType
 
 # -----------------------------------------------------------------------------
 # 1. 설정 및 기본 데이터
@@ -13,10 +14,6 @@ from langchain_experimental.agents import create_pandas_dataframe_agent
 st.set_page_config(page_title="🍱 우리 팀 점심 에이전트", page_icon="😋", layout="wide")
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_WvbJhPTbxU5c4hMwv9ak-G78jajBD-ZIrzvqxvgDTI/edit?usp=sharing"
-
-# [수정됨] 모델 설정 (OpenAI 공식 모델 사용)
-# 가성비 모델: "gpt-4o-mini" (매우 싸고 빠름, 추천!)
-# 고성능 모델: "gpt-4o" (비싸지만 똑똑함)
 MODEL_NAME = "gpt-4o-mini" 
 
 COLUMNS = [
@@ -27,7 +24,7 @@ COLUMNS = [
     '추천인', '평점', '한줄평'
 ]
 
-# 선택지 및 상수 정의 (기존과 동일)
+# 선택지 정의
 OPT_CATEGORY = ["한식", "중식", "일식", "양식", "아시안", "분식/기타"]
 OPT_PRICE = ["1만원 미만", "1~1.5만원", "1.5~2만원", "2만원 이상"]
 OPT_DISTANCE = ["도보 5분 이내", "도보 10분 이내", "차량 이동"]
@@ -37,6 +34,7 @@ OPT_WAITING = ["없음", "보통", "심함"]
 OPT_DAYS = ["월", "화", "수", "목", "금", "토", "일", "연중무휴"]
 OPT_RATING = [x * 0.5 for x in range(1, 11)]
 
+# (팝업 등록용) 자주 쓰는 키워드
 COMMON_MENUS = ["김치찌개", "된장찌개", "제육볶음", "돈가스", "파스타", "짜장면", "짬뽕", "삼겹살", "국밥", "샌드위치", "샐러드", "회/초밥"]
 COMMON_VIBES = ["조용한", "깔끔한", "시끌벅적한", "노포감성", "빨리나옴", "혼밥가능", "회식추천", "손님접대", "가성비", "비오는날", "해장"]
 DISTANCE_MAP = {"도보 5분 이내": 1, "도보 10분 이내": 2, "차량 이동": 3}
@@ -98,18 +96,14 @@ def aggregate_reviews(df):
     return grouped
 
 # -----------------------------------------------------------------------------
-# 3. [New] LangChain 에이전트 (OpenAI 버전)
+# 3. LangChain 에이전트
 # -----------------------------------------------------------------------------
 def get_agent(df):
-    """Pandas DataFrame을 분석하는 AI Agent를 생성합니다."""
-    
-    # OpenAI 키는 st.secrets에서 자동으로 가져옵니다 (openai.api_key = ...)
     llm = ChatOpenAI(
-        model=MODEL_NAME, # gpt-4o-mini
-        temperature=0,    # 데이터 분석은 정확해야 하므로 0 추천
-        api_key=st.secrets["openai"]["api_key"] # secrets.toml에서 가져옴
+        model=MODEL_NAME, 
+        temperature=0, 
+        api_key=st.secrets["openai"]["api_key"]
     )
-
     return create_pandas_dataframe_agent(
         llm,
         df,
@@ -119,7 +113,7 @@ def get_agent(df):
     )
 
 # -----------------------------------------------------------------------------
-# 4. 팝업 UI (맛집 등록) - 기존과 동일
+# 4. 팝업 UI (맛집 등록)
 # -----------------------------------------------------------------------------
 @st.dialog("맛집 등록하기 📝")
 def popup_register():
@@ -224,16 +218,15 @@ if menu == "🔍 점심 추천 (기본)":
 elif menu == "💬 AI 상담소 (New)":
     st.title("🧠 AI 점심 상담소")
     st.caption(f"Powered by OpenAI {MODEL_NAME}")
-
+    
     raw_df = load_data()
     if raw_df.empty:
-        st.error("데이터가 없어서 상담할 수 없어요. [데이터 관리] 탭에서 맛집을 등록해주세요.")
+        st.error("데이터가 없어서 상담할 수 없습니다.")
     else:
         df = aggregate_reviews(raw_df)
-        
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": "안녕하세요! 점심 메뉴 고민이신가요? 편하게 물어보세요! \n\n(예: '비오는 날 가기 좋은 곳 추천해줘', '평점 4.5 이상인 한식집 있어?')"}
+                {"role": "assistant", "content": "안녕하세요! 무엇이든 물어보세요. (예: '비오는 날 가기 좋은 곳 추천해줘')"}
             ]
 
         for msg in st.session_state.messages:
@@ -247,16 +240,15 @@ elif menu == "💬 AI 상담소 (New)":
 
             with st.chat_message("assistant"):
                 try:
-                    with st.spinner("데이터 분석 중... ⚡"):
+                    with st.spinner("분석 중... ⚡"):
                         agent = get_agent(df)
-                        system_prefix = "너는 친절한 점심 메뉴 추천 봇이야. 주어진 데이터를 분석해서 한국어로 대답해줘."
+                        system_prefix = "너는 친절한 점심 메뉴 추천 봇이야. 한국어로 대답해."
                         response = agent.invoke(f"{system_prefix}\n질문: {prompt}")
                         result_text = response["output"]
-                        
                         st.write(result_text)
                         st.session_state.messages.append({"role": "assistant", "content": result_text})
                 except Exception as e:
-                    st.error(f"오류가 발생했습니다: {e}")
+                    st.error(f"오류: {e}")
 
 elif menu == "📊 데이터 관리":
     st.title("📝 맛집 데이터 관리")
@@ -267,8 +259,9 @@ elif menu == "📊 데이터 관리":
     df = load_data()
     existing_recommenders = get_unique_values(df, '추천인')
     
-    st.markdown("⚠️ **Tip:** 셀을 더블클릭하여 수정하세요. '메뉴/키워드'는 직접 입력 가능합니다.")
+    st.markdown("⚠️ **Tip:** **'메뉴/분위기'** 칸은 자유롭게 입력(콤마로 구분)하세요. 나머지는 더블클릭하여 선택하세요.")
     
+    # [수정됨] 메뉴와 분위기를 다시 '자유 텍스트 입력'으로 변경
     edited_df = st.data_editor(
         df, 
         num_rows="dynamic", 
@@ -285,9 +278,11 @@ elif menu == "📊 데이터 관리":
             
             "평점": st.column_config.SelectboxColumn(label="평점", width="small", options=OPT_RATING, required=True),
             "추천인": st.column_config.SelectboxColumn(label="추천인", width="medium", options=existing_recommenders),
-            "메뉴키워드": st.column_config.SelectboxColumn(label="메뉴(1개 선택)", width="medium", options=COMMON_MENUS),
-            "분위기키워드": st.column_config.SelectboxColumn(label="분위기(1개 선택)", width="medium", options=COMMON_VIBES),
-            "휴무일": st.column_config.SelectboxColumn(label="휴무일(1개 선택)", width="small", options=OPT_DAYS)
+            "휴무일": st.column_config.SelectboxColumn(label="휴무일", width="small", options=OPT_DAYS),
+
+            # [핵심 변경] 드롭다운 제거 -> 자유 입력 (예: "김치찌개, 계란말이")
+            "메뉴키워드": st.column_config.TextColumn(label="메뉴 (자유입력)", width="medium"),
+            "분위기키워드": st.column_config.TextColumn(label="분위기 (자유입력)", width="medium"),
         }
     )
     if st.button("💾 변경사항 저장하기", type="primary"):
