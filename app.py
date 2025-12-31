@@ -137,7 +137,7 @@ if menu == "🔍 점심/카페 추천":
             filtered_opts = [c for c in available_cats_in_db if c in target_cats]
             
             if not filtered_opts: 
-                filtered_opts = available_cats_in_db # 매칭 안되면 전체 노출
+                filtered_opts = target_cats
 
             s_cat = c1.selectbox("카테고리", ["전체"] + filtered_opts)
             s_dist = c2.select_slider("최대 이동 거리", options=["도보 5분 이내", "도보 10분 이내", "차량 이동(전체)"], value="도보 10분 이내")
