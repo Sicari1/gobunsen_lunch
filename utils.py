@@ -82,16 +82,46 @@ def save_data(df):
     except Exception as e:
         st.error(f"저장 실패: {e}")
 
-# [신규] 식사 기록 추가 (Append)
 def add_history_row(new_row_dict):
+    # 1. 어디에 쓸 건지 주소부터 출력 (터미널 확인용)
+    print("\n---------------------------------------------------")
+    print(f"🔥 [DEBUG] 쓰기 시도 중...")
+    print(f"🎯 타겟 시트 URL: {cfg.SHEET_URL}")
+    print(f"🎯 타겟 탭 이름: {cfg.WORKSHEET_NAME_HISTORY}")
+
+    # 2. 기존 데이터 로드
+    df = load_history()
+    print(f"📂 기존 데이터 개수: {len(df)}개")
+
+    # 3. 데이터 합치기
+    new_df = pd.DataFrame([new_row_dict])
+    updated_df = pd.concat([df, new_df], ignore_index=True)
+    
+    # [중요] 데이터 타입 강제 변환 (숫자/날짜 깨짐 방지)
+    updated_df = updated_df.astype(str)
+    
+    print(f"📝 저장할 데이터 개수: {len(updated_df)}개")
+    print(f"💾 데이터 미리보기:\n{updated_df.tail(1)}")
+
+    # 4. 강제 쓰기 및 캐시 삭제
     try:
-        df = load_history()
-        new_df = pd.DataFrame([new_row_dict])
-        updated_df = pd.concat([df, new_df], ignore_index=True)
-        
         conn = st.connection("gsheets", type=GSheetsConnection)
-        conn.update(spreadsheet=cfg.SHEET_URL, worksheet=cfg.WORKSHEET_NAME_HISTORY, data=updated_df)
+        
+        # 시트 업데이트 수행
+        conn.update(
+            spreadsheet=cfg.SHEET_URL, 
+            worksheet=cfg.WORKSHEET_NAME_HISTORY, 
+            data=updated_df
+        )
+        
+        # 캐시 날리기 (매우 중요)
+        st.cache_data.clear()
+        print("✅ [SUCCESS] 업데이트 명령 실행 완료 (에러 없음)")
+        print("---------------------------------------------------\n")
         return True
+
     except Exception as e:
-        st.error(f"기록 저장 실패: {e}")
+        print(f"❌ [FAIL] 저장 중 치명적 에러 발생: {e}")
+        st.error(f"저장 시스템 에러: {e}")
         return False
+    
