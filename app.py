@@ -71,7 +71,7 @@ def popup_register():
 
     rating = st.slider("별점", 1.0, 5.0, 3.0, 0.5)
     comment = st.text_input("한줄평")
-    recommender = st.text_input("추천인")
+    recommender = st.text_input("작성자")
 
     st.markdown("---")
     
@@ -90,7 +90,7 @@ def popup_register():
                 '가격대': price, '거리': distance, '최대수용인원': capacity, 
                 '전화번호': phone, '네이버지도URL': final_link, 
                 '예약필수여부': reservation, '웨이팅정도': waiting, '휴무일': ",".join(off_days), 
-                '추천인': recommender, '평점': rating, '한줄평': comment
+                '작성자': recommender, '평점': rating, '한줄평': comment
             }
             
             # 데이터 로드 -> 추가 -> 저장
@@ -143,7 +143,8 @@ if menu == "🔍 점심/카페 추천":
             s_dist = c2.select_slider("최대 이동 거리", options=["도보 5분 이내", "도보 10분 이내", "차량 이동(전체)"], value="도보 10분 이내")
             s_people = c3.selectbox("인원", ["상관없음", "4명 이하", "5~8명", "단체"])
 
-            all_menu = utils.get_unique_values(df, '메뉴키워드', target_menus)
+            df_mode_filtered = df[df['카테고리'].isin(target_cats)]
+            all_menu = utils.get_unique_values(df_mode_filtered, '메뉴키워드', target_menus)
             all_vibe = utils.get_unique_values(df, '분위기키워드', cfg.COMMON_VIBES)
             
             k1, k2 = st.columns(2)
@@ -185,7 +186,7 @@ if menu == "🔍 점심/카페 추천":
                                 st.write(f"**🥘** {r['메뉴키워드']} | **✨** {r['분위기키워드']}")
                                 st.caption(f"📍 {r['거리']} | 💰 {r['가격대']} | 📞 {r['전화번호']}")
                                 st.divider()
-                                for comment, person in zip(r['한줄평'], r['추천인']):
+                                for comment, person in zip(r['한줄평'], r['작성자']):
                                     if comment: st.write(f"- {comment} (by {person})")
                             with c2:
                                 if r['네이버지도URL']: st.link_button("지도", r['네이버지도URL'])
@@ -236,7 +237,7 @@ elif menu == "📊 데이터 관리":
             popup_register()
     
     df = utils.load_data()
-    existing_recommenders = utils.get_unique_values(df, '추천인')
+    existing_recommenders = utils.get_unique_values(df, '작성자')
     
     st.markdown("⚠️ **Tip:** 메뉴/분위기는 **자유롭게 텍스트 입력**이 가능합니다.")
     
@@ -257,7 +258,7 @@ elif menu == "📊 데이터 관리":
             "전화번호": st.column_config.TextColumn(width="medium"),
             "한줄평": st.column_config.TextColumn(width="large"),
             "평점": st.column_config.SelectboxColumn(label="평점", width="small", options=cfg.OPT_RATING, required=True),
-            "추천인": st.column_config.SelectboxColumn(label="추천인", width="medium", options=existing_recommenders),
+            "작성자": st.column_config.SelectboxColumn(label="작성자", width="medium", options=existing_recommenders),
             "휴무일": st.column_config.SelectboxColumn(label="휴무일", width="small", options=cfg.OPT_DAYS),
             "메뉴키워드": st.column_config.TextColumn(label="메뉴 (자유입력)", width="medium"),
             "분위기키워드": st.column_config.TextColumn(label="분위기 (자유입력)", width="medium"),

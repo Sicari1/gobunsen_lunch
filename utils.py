@@ -50,7 +50,7 @@ def aggregate_reviews(df):
         '카테고리': 'first', '메뉴키워드': 'first', '분위기키워드': 'first',
         '가격대': 'first', '거리': 'first', '최대수용인원': 'first',
         '전화번호': 'first', '네이버지도URL': 'first', '휴무일': 'first',
-        '평점': 'mean', '한줄평': lambda x: list(x), '추천인': lambda x: list(x)
+        '평점': 'mean', '한줄평': lambda x: list(x), '작성자': lambda x: list(x)
     }).reset_index()
     grouped['평점'] = grouped['평점'].round(1)
     return grouped
