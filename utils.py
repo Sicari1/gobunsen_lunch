@@ -2,13 +2,16 @@
 import streamlit as st
 import pandas as pd
 import re
+from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 import config as cfg  # config.py 임포트
 
 def load_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(spreadsheet=cfg.SHEET_URL, ttl=0)
+        # worksheet 인자 추가 (기본값: 첫번째 시트)
+        df = conn.read(spreadsheet=cfg.SHEET_URL, worksheet=cfg.WORKSHEET_NAME_LIST, ttl=0)
+        
         if df.empty or len(df.columns) < len(cfg.COLUMNS): 
             return pd.DataFrame(columns=cfg.COLUMNS)
         
@@ -20,6 +23,7 @@ def load_data():
         df = df.astype({c: str for c in df.columns if c != '평점'})
         return df
     except Exception as e:
+        st.error(f"데이터 로드 오류: {e}")
         return pd.DataFrame(columns=cfg.COLUMNS)
 
 def save_data(df):
@@ -54,3 +58,40 @@ def aggregate_reviews(df):
     }).reset_index()
     grouped['평점'] = grouped['평점'].round(1)
     return grouped
+
+# [신규] 식사 기록 로드
+def load_history():
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(spreadsheet=cfg.SHEET_URL, worksheet=cfg.WORKSHEET_NAME_HISTORY, ttl=0)
+        
+        if df.empty: return pd.DataFrame(columns=cfg.COLUMNS_HISTORY)
+        
+        # 필수 컬럼 보장
+        missing_cols = set(cfg.COLUMNS_HISTORY) - set(df.columns)
+        for c in missing_cols: df[c] = ""
+        return df[cfg.COLUMNS_HISTORY].fillna("")
+    except Exception:
+        st.error(f"히스토리 로드 실패: {e}") 
+        return pd.DataFrame(columns=cfg.COLUMNS_HISTORY)
+# 2. 맛집 리스트 저장 (기존 함수 수정)
+def save_data(df):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn.update(spreadsheet=cfg.SHEET_URL, worksheet=cfg.WORKSHEET_NAME_LIST, data=df)
+    except Exception as e:
+        st.error(f"저장 실패: {e}")
+
+# [신규] 식사 기록 추가 (Append)
+def add_history_row(new_row_dict):
+    try:
+        df = load_history()
+        new_df = pd.DataFrame([new_row_dict])
+        updated_df = pd.concat([df, new_df], ignore_index=True)
+        
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn.update(spreadsheet=cfg.SHEET_URL, worksheet=cfg.WORKSHEET_NAME_HISTORY, data=updated_df)
+        return True
+    except Exception as e:
+        st.error(f"기록 저장 실패: {e}")
+        return False
