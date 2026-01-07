@@ -104,10 +104,15 @@ def popup_register():
 menu = st.sidebar.radio("메뉴", ["🔍 점심/카페 추천", "💬 AI 상담소 (New)", "📅 식사 기록", "📊 데이터 관리"])
 
 # 3-1. 점심/카페 추천
+# 3-1. 점심/카페 추천
 if menu == "🔍 점심/카페 추천":
     st.title("🤖 오늘 어디 가지?")
     raw_df = utils.load_data()
     
+    # [수정] 검색 결과 유지를 위한 세션 초기화
+    if 'search_results' not in st.session_state:
+        st.session_state.search_results = None
+
     if raw_df.empty:
         st.info("데이터가 없습니다. 먼저 데이터를 등록해주세요.")
     else:
@@ -151,24 +156,32 @@ if menu == "🔍 점심/카페 추천":
                 
                 if s_menu: result = result[result['메뉴키워드'].apply(lambda x: any(k in str(x) for k in s_menu))]
                 if s_vibe: result = result[result['분위기키워드'].apply(lambda x: any(k in str(x) for k in s_vibe))]
+                
+                # 결과 세션 저장
+                st.session_state.search_results = result
+
+            # 저장된 결과가 있으면 출력
+            if st.session_state.search_results is not None:
+                result = st.session_state.search_results
 
                 if result.empty: 
                     st.warning("조건에 맞는 곳이 없어요.")
                 else:
                     st.success(f"{len(result)}곳 발견!")
                     
-                    # [신규] 최근 먹은 기록 확인을 위해 history 로드
                     history_df = utils.load_history()
                     recent_eats = []
                     if not history_df.empty:
-                        # 오늘 날짜 기준 최근 7일
-                        recent_eats = history_df['식당명'].tolist()[-10:] # 간단하게 최근 10개만
+                        recent_eats = history_df['식당명'].tolist()[-10:]
 
                     for i, r in result.iterrows():
                         avg_score = r['평점']
-                        review_count = len(r['한줄평'])
                         
-                        # 최근에 먹은 곳이면 뱃지 표시
+                        # [복구] 리뷰 리스트 가져오기 (aggregate_reviews에서 리스트로 변환됨)
+                        review_list = r['한줄평'] 
+                        writer_list = r['작성자']
+                        review_count = len(review_list)
+                        
                         visit_badge = " (⚠️최근 방문)" if r['식당명'] in recent_eats else ""
                         
                         with st.expander(f"🍽️ **{r['식당명']}**{visit_badge} ({r['카테고리']}) ⭐{avg_score}"):
@@ -178,26 +191,37 @@ if menu == "🔍 점심/카페 추천":
                                 st.caption(f"📍 {r['거리']} | 💰 {r['가격대']}")
                                 st.divider()
                                 
+                                # [수정] 누락되었던 리뷰 출력 로직 복구
+                                if review_count > 0:
+                                    st.caption(f"💬 **리뷰 {review_count}개**")
+                                    # 리스트 순회하며 출력
+                                    for rv, wr in zip(review_list, writer_list):
+                                        if rv: st.text(f"└ {wr}: {rv}")
+                                else:
+                                    st.caption("등록된 한줄평이 없습니다.")
+
+                                st.divider()
+                                
                                 # [신규] '오늘 이거 먹음' 버튼
                                 col_btn, col_info = st.columns([1, 2])
                                 with col_btn:
                                     if st.button(f"😋 오늘 이거 먹음!", key=f"eat_{i}"):
                                         today = datetime.now().strftime("%Y-%m-%d")
-                                        # 기록 저장 로직
                                         log_data = {
                                             "날짜": today,
                                             "식당명": r['식당명'],
                                             "카테고리": r['카테고리'],
-                                            "메뉴": r['메뉴키워드'], # 대표메뉴로 저장
-                                            "작성자": "팀원", # 기본값
+                                            "메뉴": r['메뉴키워드'], 
+                                            "작성자": "팀원", 
                                             "평점": str(avg_score),
                                             "비고": "추천 통해 방문"
                                         }
                                         if utils.add_history_row(log_data):
-                                            st.cache_data.clear() # 캐시 강제 삭제
-                                            st.toast(f"📅 [{today}] '{r['식당명']}' 저장 완료! (기록 탭 확인)", icon="💾")
+                                            st.cache_data.clear()
+                                            st.toast(f"📅 [{today}] '{r['식당명']}' 저장 완료!", icon="💾")
+                                            st.rerun() # 즉시 반영
                                         else:
-                                            st.error("저장 실패: 구글 시트의 'history' 탭을 확인하세요.")
+                                            st.error("저장 실패")
 
                             with c2:
                                 if r['네이버지도URL']: st.link_button("지도 보기", r['네이버지도URL'])
@@ -284,39 +308,84 @@ elif menu == "📅 식사 기록":
         # 최신순 정렬해서 보여주기
         st.dataframe(history_df.sort_values(by="날짜", ascending=False), use_container_width=True)
 
-# 3-4. 데이터 관리 (기존 유지)
+# 3-4. 데이터 관리
 elif menu == "📊 데이터 관리":
     st.title("📝 데이터 관리")
-    c1, c2 = st.columns([4, 1])
-    with c2:
-        if st.button("➕ 맛집/카페 등록", type="primary"): 
-            popup_register()
     
-    df = utils.load_data()
-    existing_writers = utils.get_unique_values(df, '작성자')
-    ALL_CATS = cfg.OPT_CATEGORY_FOOD + cfg.OPT_CATEGORY_CAFE
-    
-    edited_df = st.data_editor(
-        df, 
-        num_rows="dynamic", 
-        column_config={
-            "카테고리": st.column_config.SelectboxColumn(options=ALL_CATS, required=True),
-            "가격대": st.column_config.SelectboxColumn(options=cfg.OPT_PRICE, required=True),
-            "거리": st.column_config.SelectboxColumn(options=cfg.OPT_DISTANCE, required=True),
-            "최대수용인원": st.column_config.SelectboxColumn(options=cfg.OPT_CAPACITY, required=True),
-            "예약필수여부": st.column_config.SelectboxColumn(options=cfg.OPT_RESERVATION),
-            "웨이팅정도": st.column_config.SelectboxColumn(options=cfg.OPT_WAITING),
-            "네이버지도URL": st.column_config.LinkColumn(display_text="링크"),
-            "전화번호": st.column_config.TextColumn(width="medium"),
-            "한줄평": st.column_config.TextColumn(width="large"),
-            "평점": st.column_config.SelectboxColumn(label="평점", width="small", options=cfg.OPT_RATING, required=True),
-            "작성자": st.column_config.SelectboxColumn(label="작성자", width="medium", options=existing_writers),
-            "휴무일": st.column_config.SelectboxColumn(label="휴무일", width="small", options=cfg.OPT_DAYS),
-            "메뉴키워드": st.column_config.TextColumn(label="메뉴 (자유입력)", width="medium"),
-            "분위기키워드": st.column_config.TextColumn(label="분위기 (자유입력)", width="medium"),
-        }
-    )
-    if st.button("💾 변경사항 저장하기", type="primary"):
-        utils.save_data(edited_df)
-        st.success("저장 완료!")
-        st.rerun()
+    # [신규] 관리할 데이터 대상 선택 (탭 기능)
+    manage_type = st.radio("관리 대상 선택", ["맛집 리스트 📂", "식사 기록 📅"], horizontal=True)
+
+    # ---------------------------------------------------------
+    # A. 맛집 리스트 관리
+    # ---------------------------------------------------------
+    if manage_type == "맛집 리스트 📂":
+        c1, c2 = st.columns([4, 1])
+        with c2:
+            # [해결 2] key="btn_popup_open" 추가하여 ID 중복 방지
+            if st.button("➕ 맛집/카페 등록", type="primary", key="btn_popup_open"): 
+                popup_register()
+        
+        df = utils.load_data()
+        existing_writers = utils.get_unique_values(df, '작성자')
+        ALL_CATS = cfg.OPT_CATEGORY_FOOD + cfg.OPT_CATEGORY_CAFE
+        
+        edited_df = st.data_editor(
+            df, 
+            num_rows="dynamic", 
+            key="editor_list", 
+            column_config={
+                "카테고리": st.column_config.SelectboxColumn(options=ALL_CATS, required=True),
+                "가격대": st.column_config.SelectboxColumn(options=cfg.OPT_PRICE, required=True),
+                "거리": st.column_config.SelectboxColumn(options=cfg.OPT_DISTANCE, required=True),
+                "최대수용인원": st.column_config.SelectboxColumn(options=cfg.OPT_CAPACITY, required=True),
+                "예약필수여부": st.column_config.SelectboxColumn(options=cfg.OPT_RESERVATION),
+                "웨이팅정도": st.column_config.SelectboxColumn(options=cfg.OPT_WAITING),
+                "네이버지도URL": st.column_config.LinkColumn(display_text="링크"),
+                "전화번호": st.column_config.TextColumn(width="medium"),
+                "한줄평": st.column_config.TextColumn(width="large"),
+                "평점": st.column_config.SelectboxColumn(label="평점", width="small", options=cfg.OPT_RATING, required=True),
+                "작성자": st.column_config.SelectboxColumn(label="작성자", width="medium", options=existing_writers),
+                "휴무일": st.column_config.SelectboxColumn(label="휴무일", width="small", options=cfg.OPT_DAYS),
+                "메뉴키워드": st.column_config.TextColumn(label="메뉴 (자유입력)", width="medium"),
+                "분위기키워드": st.column_config.TextColumn(label="분위기 (자유입력)", width="medium"),
+            }
+        )
+        if st.button("💾 맛집 리스트 저장", type="primary", key="btn_save_list"):
+            utils.save_data(edited_df)
+            st.success("맛집 리스트가 저장되었습니다!")
+            st.rerun()
+
+    # ---------------------------------------------------------
+    # B. 식사 기록 관리 (신규 기능)
+    # ---------------------------------------------------------
+    else:
+        st.info("💡 날짜, 식당명 등을 수정하거나 잘못된 기록을 삭제(행 선택 후 Delete)할 수 있습니다.")
+        
+        history_df = utils.load_history()
+        
+        # [해결 1] '평점' 컬럼의 float 타입을 string으로 강제 변환하여 TextColumn과 호환되게 함
+        if not history_df.empty:
+            history_df = history_df.astype(str)
+
+        # 편집기 표시
+        edited_history_df = st.data_editor(
+            history_df,
+            num_rows="dynamic", # 행 추가/삭제 허용
+            key="editor_history", 
+            use_container_width=True,
+            column_config={
+                "날짜": st.column_config.TextColumn(width="medium", help="YYYY-MM-DD 형식"),
+                "식당명": st.column_config.TextColumn(width="medium"),
+                "카테고리": st.column_config.TextColumn(width="small"),
+                "메뉴": st.column_config.TextColumn(width="medium"),
+                "작성자": st.column_config.TextColumn(width="small"),
+                "평점": st.column_config.TextColumn(width="small"), # 이제 에러 안 남
+                "비고": st.column_config.TextColumn(width="large"),
+            }
+        )
+        
+        if st.button("💾 식사 기록 저장", type="primary", key="btn_save_history"):
+            utils.save_history(edited_history_df)
+            st.success("식사 기록이 저장되었습니다!")
+            st.cache_data.clear() 
+            st.rerun()
